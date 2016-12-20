@@ -43,7 +43,7 @@ team_t team = {
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
 #define INFO_SIZE 32
 #define MIN_DATA_SIZE 10000
-#define PUT(pointer,value) (*(long*)pointer = value)
+#define PUT(pointer,value) (*(long*)pointer = value) //Put value at address that pointer holds
 #define GETPNEXT(pointer) (*((long*)pointer+1))
 #define GETPPREV(pointer) (*((long*)pointer+2))
 #define GETSIZE(pointer) (*((long*)pointer))
