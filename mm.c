@@ -47,6 +47,7 @@ team_t team = {
 #define GETPPREV(pointer) (*((char*)pointer+2*WORDSIZE))
 #define GETSIZE(pointer) (*((long*)pointer))
 #define GETPAYLOADPTR(pointer) ((char*)pointer+WORDSIZE)
+/*void pointers are not allowed to perform arithmetic operation, this MACRO will transform*/
 #define CAST_TO_BYTE_PTR(pointer) ((char*)pointer)
 /*Use best fit policy when free list has little of free node*/
 void* find_best_fit(void* free_pHead, int rounded_size);
@@ -54,6 +55,10 @@ void* find_best_fit(void* free_pHead, int rounded_size);
 void* find_first_fit(void* free_pHead, int rounded_size);
 /*Allocate more heap when there are no more space in the free list*/
 void* allocateMoreHeap(size_t rounded_size);
+/*Join prev blocks and next blocks with current blocks when free memory and fix link.
+The argument is the pointer to the HEADER, and return the pointer to the HEADER of new coalescing block
+*/
+void* join(void*pointer);
 void* free_pHead;
 /*
 * mm_init - initialize the malloc package.
@@ -117,8 +122,13 @@ void* find_first_fit(void*free_pHead, int rounded_size)
 	void* traverse_ptr = free_pHead;
 	while (*traverse_ptr != 0x0)
 	{
-		if (*traverse_ptr == complete_size)
+		if (GETSIZE(traverse_ptr) >= complete_size)
+		{
+			PUT(traverse_ptr,COMBINE(complete_size,1));
+			PUT(CAST_TO_BYTE_PTR(traverse_ptr)+WORDSIZE+rounded_size,COMBINE(complete_size,1));
 			return GETPAYLOADPTR(traverse_ptr);
+		}
+			
 		else
 		{
 			traverse_ptr = GETPNEXT(traverse_ptr);
@@ -152,6 +162,8 @@ void* find_best_fit(void *free_pHead, int rounded_size)
 	}
 	if (result_ptr == NULL)
 		return NULL;
+	PUT(result_ptr,COMBINE(complete_size,1));
+	PUT(CAST_TO_BYTE_PTR(result_ptr)+WORDSIZE+rounded_size,COMBINE(complete_size,1));
 	return GETPAYLOADPTR(result_ptr);
 }
 void* allocateMoreHeap(size_t rounded_size)
@@ -161,6 +173,28 @@ void* allocateMoreHeap(size_t rounded_size)
 	PUT(new_heap_ptr, COMBINE(complete_size, 1));
 	PUT(CAST_TO_BYTE_PTR(free_pHead) + WORDSIZE + rounded_size, COMBINE(complete_size, 1));
 	return GETPAYLOADPTR(new_heap_ptr);
+}
+void* join(void*pointer)
+{
+	/*Check if the next block is free, coalescene and fix link*/
+	void* next_header_ptr = CAST_TO_BYTE_POINTER(pointer) + GETSIZE(pointer);
+	int isallocated = GETSIZE(next_header_ptr) & 1;
+	if(isallocated == 0)
+	{
+		void* tmp_ptr = *(CAST_TO_BYTE_POINTER(next_header_ptr) + WORDSIZE);//get pnext of next_block
+		void* tmp_ptr_1 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*WORDSIZE);//get prev of next_block
+		void* tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(tmp_ptr_1)+WORDSIZE); //get pnext of prev of next_block
+		void* tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(tmp_ptr)+2*WORDSIZE); //get prev of pnext of next_block
+		tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+WORDSIZE); //pnext of prev of next_block = current block->pnext
+		tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*WORDSIZE); //pprev of pnext of next_block = current block->prev
+		void* next_footer_ptr = CAST_TO_BYTE_POINTER(next_header_ptr)+GETSIZE(next_header_ptr)-WORDSIZE;
+		int newsize = GETSIZE(pointer)+GETSIZE(next_header_ptr);
+		PUT(pointer,COMBINE(newsize,0));
+		PUT(next_footer_ptr,COMBINE(newsize,0));
+	}
+	/*Check if prev block is free,coalescene and fix link*/
+	
+	
 }
 
 
