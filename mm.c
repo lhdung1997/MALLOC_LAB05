@@ -37,16 +37,18 @@ team_t team = {
 
 /* single word (4) or double word (8) alignment */
 #define ALIGNMENT 8
-#define WORDSIZE 8
+#define BYTE8 8
+#define BYTE4 4
 /* rounds up to the nearest multiple of ALIGNMENT */
 #define ALIGN(size) (((size) + (ALIGNMENT-1)) & ~0x7)
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
-#define INFO_SIZE 32
-#define PUT(pointer,value) (*(long*)pointer = value) //Put value at address that pointer holds
-#define GETPNEXT(pointer) (*((char*)pointer+WORDSIZE))
-#define GETPPREV(pointer) (*((char*)pointer+2*WORDSIZE))
-#define GETSIZE(pointer) (*((long*)pointer))
-#define GETPAYLOADPTR(pointer) ((char*)pointer+WORDSIZE)
+#define INFO_SIZE 28
+#define PUTSIZE(pointer,value) (*(size_t*)pointer = value) //Put value at address that pointer holds
+#define PUTPTR(pointer,value) (*(long*)pointer = value)
+#define GETPNEXT(pointer) (*((char*)pointer+BYTE8))
+#define GETPPREV(pointer) (*((char*)pointer+2*BYTE8))
+#define GETSIZE(pointer) (*((size_t*)pointer))
+#define GETPAYLOADPTR(pointer) ((char*)pointer+BYTE8)
 /*void pointers are not allowed to perform arithmetic operation, this MACRO will transform*/
 #define CAST_TO_BYTE_PTR(pointer) ((char*)pointer)
 /*Use best fit policy when free list has little of free node*/
@@ -66,13 +68,10 @@ void* free_pHead;
 int mm_init(void)
 {
 	/*Initialize free list pointer with SPECIAL BLOCK indicates the signal of the end of the list
-	With HEADER = FOOTER = PNEXT = PREV = 0
+	With HEADER = 0
 	*/
-	free_pHead = mem_sbrk(ALIGN(INFO_SIZE));
-	PUT(CAST_TO_BYTE_PTR(free_pHead), 0x0);
-	PUT(CAST_TO_BYTE_PTR(free_pHead) + WORDSIZE, 0x0); //pnext = null
-	PUT(CAST_TO_BYTE_PTR(free_pHead) + 2 * WORDSIZE, 0x0); //pprev = null
-	PUT(CAST_TO_BYTE_PTR(free_pHead) + 3 * WORDSIZE, 0x0);
+	free_pHead = mem_sbrk(8BYTE);
+	PUTSIZE(free_pHead,0x0);
 	return 0;
 }
 
@@ -120,15 +119,14 @@ void *mm_realloc(void *ptr, size_t size)
 }
 /*This is first fit placement policy returning the pointer to the payload*/
 void* find_first_fit(void*free_pHead, int rounded_size)
-	{
-	int complete_size = rounded_size + INFO_SIZE;
+{
 	void* traverse_ptr = free_pHead;
 	while (*traverse_ptr != 0x0)
 	{
-		if (GETSIZE(traverse_ptr) >= complete_size)
+		if (GETSIZE(traverse_ptr) >= rounded_size)
 		{
-			PUT(traverse_ptr,COMBINE(complete_size,1));
-			PUT(CAST_TO_BYTE_PTR(traverse_ptr)+WORDSIZE+rounded_size,COMBINE(complete_size,1));
+			PUTSIZE(traverse_ptr,COMBINE(rounded_size,1));
+			PUTSIZE(CAST_TO_BYTE_PTR(traverse_ptr)+(rounded_size-BYTE4),COMBINE(rounded_size,1));
 			return GETPAYLOADPTR(traverse_ptr);
 		}
 			
@@ -142,13 +140,12 @@ void* find_first_fit(void*free_pHead, int rounded_size)
 /*This is best fit policy placement policy returning the pointer to the payload*/
 void* find_best_fit(void *free_pHead, int rounded_size)
 {
-	int complete_size = rounded_size + INFO_SIZE;
 	int fit_size = -1;
 	void* result_ptr = NULL;
 	void* traverse_ptr = free_pHead;
 	while (*traverse_ptr != 0x0)
 	{
-		if (GETSIZE(traverse_ptr) >= complete_size)
+		if (GETSIZE(traverse_ptr) >= rounded_size)
 		{
 			if (fit_size == -1)
 			{
@@ -165,16 +162,15 @@ void* find_best_fit(void *free_pHead, int rounded_size)
 	}
 	if (result_ptr == NULL)
 		return NULL;
-	PUT(result_ptr,COMBINE(complete_size,1));
-	PUT(CAST_TO_BYTE_PTR(result_ptr)+WORDSIZE+rounded_size,COMBINE(complete_size,1));
+	PUTSIZE(result_ptr,COMBINE(rounded_size,1));
+	PUTSIZE(CAST_TO_BYTE_PTR(result_ptr)+rounded_size-BYTE4,COMBINE(rounded_size,1));
 	return GETPAYLOADPTR(result_ptr);
 }
 void* allocateMoreHeap(size_t rounded_size)
 {
-	size_t complete_size = rounded_size + INFO_SIZE;
-	void* new_heap_ptr = mem_sbrk(complete_size);
-	PUT(new_heap_ptr, COMBINE(complete_size, 1));
-	PUT(CAST_TO_BYTE_PTR(free_pHead) + WORDSIZE + rounded_size, COMBINE(complete_size, 1));
+	void* new_heap_ptr = mem_sbrk(rounded_size);
+	PUTSIZE(new_heap_ptr, COMBINE(rounded_size, 1));
+	PUTSIZE(CAST_TO_BYTE_PTR(new_heap_ptr) + rounded_size-BYTE4, COMBINE(rounded_size, 1));
 	return GETPAYLOADPTR(new_heap_ptr);
 }
 void* join(void*pointer)
@@ -184,40 +180,39 @@ void* join(void*pointer)
 	int isallocated = GETSIZE(next_header_ptr) & 1;
 	if(isallocated == 0)
 	{
-		void* tmp_ptr = *(CAST_TO_BYTE_POINTER(next_header_ptr) + WORDSIZE);//get pnext of next_block
-		void* tmp_ptr_1 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*WORDSIZE);//get prev of next_block
-		void* tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(tmp_ptr_1)+WORDSIZE); //get pnext of prev of next_block
-		void* tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(tmp_ptr)+2*WORDSIZE); //get prev of pnext of next_block
-		tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+WORDSIZE); //pnext of prev of next_block = current block->pnext
-		tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*WORDSIZE); //pprev of pnext of next_block = current block->prev
-		void* next_footer_ptr = CAST_TO_BYTE_POINTER(next_header_ptr)+GETSIZE(next_header_ptr)-WORDSIZE;
+		void* tmp_ptr = *(CAST_TO_BYTE_POINTER(next_header_ptr) + BYTE8);//get pnext of next_block
+		void* tmp_ptr_1 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*BYTE8);//get prev of next_block
+		void* tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(tmp_ptr_1)+BYTE8); //get pnext of prev of next_block
+		void* tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(tmp_ptr)+2*BYTE8); //get prev of pnext of next_block
+		tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+BYTE8); //pnext of prev of next_block = current block->pnext
+		tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(next_header_ptr)+2*BYTE8); //pprev of pnext of next_block = current block->prev
 		int newsize = GETSIZE(pointer)+GETSIZE(next_header_ptr);
-		PUT(pointer,COMBINE(newsize,0));
-		PUT(next_footer_ptr,COMBINE(newsize,0));
+		PUTSIZE(pointer,COMBINE(newsize,0));
+		PUTSIZE(CAST_TO_BYTE_POINTER(pointer)+newsize-BYTE4,COMBINE(newsize,0));
 	}
 	/*Check if prev block is free,coalescene and fix link*/
-	void* prev_footer_ptr = CAST_TO_BYTE_POINTER(pointer)-WORDSIZE;
+	void* prev_footer_ptr = CAST_TO_BYTE_POINTER(pointer)-BYTE4;
 	isallocated = GETSIZE(prev_footer_ptr) & 1;
-	void* prev_header_ptr = CAST_TO_BYTE_POINTER(prev_footer_ptr) - (GETSIZE(prev_footer_ptr) - WORDSIZE);
+	void* prev_header_ptr = CAST_TO_BYTE_POINTER(prev_footer_ptr) - (GETSIZE(prev_footer_ptr) - BYTE4);
 	if(isallocated == 0)
 	{
-		void *tmp_ptr = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+WORDSIZE); //get pnext of prev block
-		void* tmp_ptr_1 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+2*WORDSIZE); //get pprev of prev block
-		void* tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(tmp_ptr_1)+WORDSIZE);
-		void* tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(tmp_ptr)+2*WORDSIZE);
-		tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+WORDSIZE);
-		tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+2*WORDSIZE);
+		void *tmp_ptr = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+BYTE8); //get pnext of prev block
+		void* tmp_ptr_1 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+2*BYTE8); //get pprev of prev block
+		void* tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(tmp_ptr_1)+BYTE8); //get pnext of pprev of prev block
+		void* tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(tmp_ptr)+2*BYTE8); //get pprev of pnext of prev block
+		tmp_ptr_2 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+BYTE8);
+		tmp_ptr_3 = *(CAST_TO_BYTE_POINTER(prev_header_ptr)+2*BYTE8);
 		int newsize = GETSIZE(pointer)+GETSIZE(prev_header_ptr);
-		PUT(prev_header_ptr,COMBINE(newsize,0));
-		PUT(CAST_TO_BYTE_POINTER(prev_header_ptr)+newsize - WORDSIZE,COMBINE(newsize,0));
+		PUTSIZE(prev_header_ptr,COMBINE(newsize,0));
+		PUTSIZE(CAST_TO_BYTE_POINTER(prev_header_ptr)+newsize - BYTE4,COMBINE(newsize,0));
 		pointer = prev_header_ptr;
 	}
 	return pointer;
 }
 void push_front(void* pointer)
 {
-	PUT(CAST_TO_BYTE_POINTER(pointer) + WORDSIZE,free_pHead);
-	PUT(CAST_TO_BYTE_POINTER(pointer) + 2*WORDSIZE,0x0);
+	PUT(CAST_TO_BYTE_POINTER(pointer) + BYTE8,free_pHead);
+	PUT(CAST_TO_BYTE_POINTER(pointer) + 2*BYTE8,0x0);
 	free_pHead = pointer;
 }
 
