@@ -81,7 +81,7 @@ int mm_init(void)
 */
 void *mm_malloc(size_t size)
 {
-	int newsize = ALIGN(size);
+	int newsize = ALIGN(size+INFO_SIZE);
 	void* p = find_first_fit(free_pHead, newsize);
 	if (p != NULL)
 		return p;
@@ -93,7 +93,7 @@ void *mm_malloc(size_t size)
 */
 void mm_free(void *ptr)
 {
-	void* ptr = CAST_TO_BYTE_POINTER(ptr)-WORDSIZE;
+	void* ptr = CAST_TO_BYTE_POINTER(ptr)-BYTE8;
 	ptr = join(ptr);
 	push_front(ptr);
 }
