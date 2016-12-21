@@ -209,9 +209,13 @@ void* join(void*pointer)
 		PUT(CAST_TO_BYTE_POINTER(prev_header_ptr)+newsize - WORDSIZE,COMBINE(newsize,0));
 		pointer = prev_header_ptr;
 	}
+	return pointer;
 }
 void push_front(void* pointer)
 {
+	PUT(CAST_TO_BYTE_POINTER(pointer) + WORDSIZE,free_pHead);
+	PUT(CAST_TO_BYTE_POINTER(pointer) + 2*WORDSIZE,0x0);
+	free_pHead = pointer;
 }
 
 
