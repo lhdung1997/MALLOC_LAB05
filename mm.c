@@ -94,6 +94,9 @@ void *mm_malloc(size_t size)
 */
 void mm_free(void *ptr)
 {
+	void* ptr = CAST_TO_BYTE_POINTER(ptr)-WORDSIZE;
+	ptr = join(ptr);
+	push_front(ptr);
 }
 
 /*
