@@ -48,6 +48,7 @@ team_t team = {
 #define GETPPREV(pointer) (*((long*)pointer+2))
 #define GETSIZE(pointer) (*((long*)pointer))
 #define GETPAYLOADPTR(pointer) ((long*)pointer+1)
+#define CAST_TO_BYTE_PTR(pointer) ((char*)pointer)
 /*Use best fit policy when free list has little of free node*/
 void* find_best_fit(void* free_pHead,int rounded_size);
 /*Use first fit policy when free list has plenty of free node*/
@@ -64,10 +65,10 @@ int mm_init(void)
 	  With HEADER = FOOTER = PNEXT = PREV = 0
 	*/
 	free_pHead = mem_sbrk(ALIGN(INFO_SIZE));
-	PUT(free_pHead,0x0);
-	PUT(free_pHead+WORDSIZE,0x0); //pnext = null
-	PUT(free_pHead+2*WORDSIZE,0x0); //pprev = null
-	PUT(free_pHead+3*WORDSIZE,0x0);
+	PUT(CAST_TO_BYTE_PTR(free_pHead),0x0);
+	PUT(CAST_TO_BYTE_PTR(free_pHead)+WORDSIZE,0x0); //pnext = null
+	PUT(CAST_TO_BYTE_PTR(free_pHead)+2*WORDSIZE,0x0); //pprev = null
+	PUT(CAST_TO_BYTE_PTR(free_pHead)+3*WORDSIZE,0x0);
     return 0;
 }
 
@@ -152,9 +153,16 @@ void* find_best_fit(void *free_pHead,int rounded_size)
 		}
 		traverse_ptr = GETPNEXT(traverse_ptr);
 	}
-	if(result_ptr = NULL)
+	if(result_ptr == NULL)
 		return NULL;
 	return GETPAYLOADPTR(result_ptr);
+}
+void* allocateMoreHeap(size_t rounded_size)
+{
+	size_t complete_size = rounded_size + INFO_SIZE;
+	void* new_heap_ptr = mem_sbrk(complete_size);
+	PUT(new_heap_ptr,COMBINE(new_heap_ptr,1));
+	PUT(CAST_TO_BYTE_PTR(free_pHead)+rounded_size)
 }
 
 
