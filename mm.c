@@ -47,6 +47,7 @@ team_t team = {
 #define GETPNEXT(pointer) (*((long*)pointer+1))
 #define GETPPREV(pointer) (*((long*)pointer+2))
 #define GETSIZE(pointer) (*((long*)pointer))
+#define GETPAYLOADPTR(pointer) ((long*)pointer+1)
 /*Use best fit policy when free list has little of free node*/
 void* find_best_fit(void* free_pHead,int rounded_size);
 /*Use first fit policy when free list has plenty of free node*/
@@ -112,20 +113,22 @@ void *mm_realloc(void *ptr, size_t size)
     mm_free(oldptr);
     return newptr;
 }
+/*This is first fit placement policy returning the pointer to the payload*/
 void* find_first_fit(void*free_pHead,int rounded_size)
-{
 	int complete_size = rounded_size + INFO_SIZE;
 	void* traverse_ptr = free_pHead;
 	while(*traverse_ptr!=0x0)
 	{
 		if(*traverse_ptr == complete_size)
-			return traverse_ptr;
+			return GETPAYLOADPTR(traverse_ptr);
 		else
 		{
 			traverse_ptr = GETPNEXT(traverse_ptr);
 		}
 	}
+	return NULL;// return null pointer when there is no appropriate block
 }
+/*This is best fit policy placement policy returning the pointer to the payload*/
 void* find_best_fit(void *free_pHead,int rounded_size)
 {
 	int complete_size = rounded_size + INFO_SIZE;
@@ -136,13 +139,22 @@ void* find_best_fit(void *free_pHead,int rounded_size)
 	{
 		if(GETSIZE(traverse_ptr) >= complete_size)
 		{
-			fit_size = GETSIZE(traverse_ptr);
-			result_ptr = traverse_ptr;
+			if(fit_size == -1)
+			{
+				fit_size = GETSIZE(traverse_ptr);
+				result_ptr = traverse_ptr;
+			}
+			else if( GETSIZE(traverse_ptr) < fit_size)
+			{
+				fit_size = GETSIZE(traverse_ptr);
+				result_ptr = traverse_ptr;
+			}
 		}
+		traverse_ptr = GETPNEXT(traverse_ptr);
 	}
 	if(result_ptr = NULL)
 		return NULL;
-	return result_ptr;
+	return GETPAYLOADPTR(result_ptr);
 }
 
 
